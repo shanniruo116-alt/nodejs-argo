@@ -14,17 +14,17 @@ const AUTO_ACCESS = process.env.AUTO_ACCESS || false;
 const FILE_PATH = process.env.FILE_PATH || './tmp';
 const SUB_PATH = process.env.SUB_PATH || 'sub';
 const PORT = process.env.SERVER_PORT || process.env.PORT || 3000;
-const UUID = process.env.UUID || '9afd1229-b893-40c1-84dd-51e7ce204913';
+const UUID = process.env.UUID || 'eb7db1ee-3ef8-4545-94db-346146706ce9';
 const NEZHA_SERVER = process.env.NEZHA_SERVER || '';
 const NEZHA_PORT = process.env.NEZHA_PORT || '';
 const NEZHA_KEY = process.env.NEZHA_KEY || '';
 // 已修复：去掉了多余的单引号
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || 'beyoundtime.dpdns.org';
-const ARGO_AUTH = process.env.ARGO_AUTH || '';
-const ARGO_PORT = process.env.ARGO_PORT || 8001;
-const CFIP = process.env.CFIP || 'cdns.doon.eu.org';
+const ARGO_AUTH = process.env.ARGO_AUTH || 'eyJhIjoiNjJlNWQ5MjQ5ZWRhYmVhMTA3YjU0ODQxYmRkZTlkYjIiLCJ0IjoiMTY1MDJjMTEtYjdmMi00Mzk4LTkxYzktODM3NzUzYTJiYjFjIiwicyI6Ik1tWmhObVZtTm1ZdE5EVTJOeTAwT1dJekxXSXpaRFF0WmpJM01UVXlZek0wWWpJdyJ9';
+const ARGO_PORT = process.env.ARGO_PORT || 28766;
+const CFIP = process.env.CFIP || 'beyoundtime.dpdns.org';
 const CFPORT = process.env.CFPORT || 443;
-const NAME = process.env.NAME || '';
+const NAME = process.env.NAME || 'beyoundtime';
 
 // --- 基础工具函数 ---
 if (!fs.existsSync(FILE_PATH)) fs.mkdirSync(FILE_PATH, { recursive: true });
