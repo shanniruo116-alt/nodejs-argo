@@ -134,17 +134,38 @@ async function generateConfig() {
         streamSettings: { network: 'tcp' } 
       },
       { port: 3001, listen: "127.0.0.1", protocol: "vless", settings: { clients: [{ id: UUID }], decryption: "none" }, streamSettings: { network: "tcp", security: "none" } },
-      // 以下部分已从 ws 改为 xhttp
-      { port: 3002, listen: "127.0.0.1", protocol: "vless", settings: { clients: [{ id: UUID, level: 0 }], decryption: "none" }, streamSettings: { network: "xhttp", security: "none", xhttpSettings: { mode: "packet", path: "/vless-argo" } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"], metadataOnly: false } },
-      { port: 3003, listen: "127.0.0.1", protocol: "vmess", settings: { clients: [{ id: UUID, alterId: 0 }] }, streamSettings: { network: "xhttp", xhttpSettings: { mode: "packet", path: "/vmess-argo" } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"], metadataOnly: false } },
-      { port: 3004, listen: "127.0.0.1", protocol: "trojan", settings: { clients: [{ password: UUID }] }, streamSettings: { network: "xhttp", security: "none", xhttpSettings: { mode: "packet", path: "/trojan-argo" } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"], metadataOnly: false } },
+      
+      // 彻底修改以下部分，确保符合 XHTTP H2/H3 规范
+      { 
+        port: 3002, listen: "127.0.0.1", protocol: "vless", 
+        settings: { clients: [{ id: UUID, level: 0 }], decryption: "none" }, 
+        streamSettings: { 
+          network: "xhttp", 
+          xhttpSettings: { mode: "packet", path: "/vless-argo" } // 移除所有与 ws 相关的暗示
+        } 
+      },
+      { 
+        port: 3003, listen: "127.0.0.1", protocol: "vmess", 
+        settings: { clients: [{ id: UUID, alterId: 0 }] }, 
+        streamSettings: { 
+          network: "xhttp", 
+          xhttpSettings: { mode: "packet", path: "/vmess-argo" } 
+        } 
+      },
+      { 
+        port: 3004, listen: "127.0.0.1", protocol: "trojan", 
+        settings: { clients: [{ password: UUID }] }, 
+        streamSettings: { 
+          network: "xhttp", 
+          xhttpSettings: { mode: "packet", path: "/trojan-argo" } 
+        } 
+      }
     ],
-    dns: { servers: ["https+local://8.8.8.8/dns-query"] },
-    outbounds: [ { protocol: "freedom", tag: "direct" }, {protocol: "blackhole", tag: "block"} ]
+    dns: { servers: ["8.8.8.8"] },
+    outbounds: [ { protocol: "freedom", tag: "direct" } ]
   };
   fs.writeFileSync(path.join(FILE_PATH, 'config.json'), JSON.stringify(config, null, 2));
 }
-
 // 判断系统架构
 function getSystemArchitecture() {
   const arch = os.arch();
