@@ -19,7 +19,7 @@ const NEZHA_PORT = process.env.NEZHA_PORT || '';            // 使用哪吒v1请
 const NEZHA_KEY = process.env.NEZHA_KEY || '';              // 哪吒v1的NZ_CLIENT_SECRET或哪吒v0的agent密钥
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || 'beyoundtime.dpdns.org';          // 固定隧道域名,留空即启用临时隧道
 const ARGO_AUTH = process.env.ARGO_AUTH || 'eyJhIjoiNjJlNWQ5MjQ5ZWRhYmVhMTA3YjU0ODQxYmRkZTlkYjIiLCJ0IjoiMTY1MDJjMTEtYjdmMi00Mzk4LTkxYzktODM3NzUzYTJiYjFjIiwicyI6Ik1tWmhObVZtTm1ZdE5EVTJOeTAwT1dJekxXSXpaRFF0WmpJM01UVXlZek0wWWpJdyJ9';              // 固定隧道密钥json或token,留空即启用临时隧道,json获取地址：https://json.zone.id
-const ARGO_PORT = process.env.ARGO_PORT || 3002;            // 固定隧道端口,使用token需在cloudflare后台设置和这里一致
+const ARGO_PORT = process.env.ARGO_PORT || 28766;            // 固定隧道端口,使用token需在cloudflare后台设置和这里一致
 const CFIP = process.env.CFIP || 'beyoundtime.dpdns.org';        // 节点优选域名或优选ip  
 const CFPORT = process.env.CFPORT || 443;                   // 节点优选域名或优选ip对应的端口
 const NAME = process.env.NAME || 'beyoundtime';                        // 节点名称
@@ -302,7 +302,7 @@ uuid: ${UUID}`;
     } else if (ARGO_AUTH.match(/TunnelSecret/)) {
       args = `tunnel --edge-ip-version auto --config ${FILE_PATH}/tunnel.yml run`;
     } else {
-      args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${FILE_PATH}/boot.log --loglevel info --url http://localhost:${ARGO_PORT}`;
+     args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${FILE_PATH}/boot.log --loglevel info --url http://localhost:3002`;
     }
 
     try {
