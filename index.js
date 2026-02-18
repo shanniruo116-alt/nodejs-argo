@@ -13,9 +13,8 @@ const PROJECT_URL = process.env.PROJECT_URL || 'beyoundtime-production-8b80.up.r
 const FILE_PATH = process.env.FILE_PATH || './tmp';
 const SUB_PATH = process.env.SUB_PATH || 'sub';
 const PORT = process.env.PORT || 8080; 
-const UUID = process.env.UUID || 'eb7db1ee-3ef8-4545-94db-346146706ce9';
+const UUID = process.env.UUID || 'eb7d51ee-3ef8-4545-94db-346146706ce9';
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || 'beyoundtime-production-8b80.up.railway.app';
-const ARGO_PORT = 28766; 
 const CFIP = process.env.CFIP || 'beyoundtime-production-8b80.up.railway.app';
 const CFPORT = 443;
 const NAME = process.env.NAME || 'beyoundtime';
@@ -26,24 +25,49 @@ const webPath = path.join(FILE_PATH, 'web');
 const subPath = path.join(FILE_PATH, 'sub.txt');
 const configPath = path.join(FILE_PATH, 'config.json');
 
-// --- 根路由与反向代理 ---
+// --- 根路由 ---
 app.get("/", (req, res) => res.send("Server is running!"));
 
-// 关键：将流量转发给 Xray 的 WebSocket 端口
-app.use('/vless-argo', createProxyMiddleware({ target: `http://127.0.0.1:3002`, ws: true, changeOrigin: true }));
-app.use('/vmess-argo', createProxyMiddleware({ target: `http://127.0.0.1:3003`, ws: true, changeOrigin: true }));
-app.use('/trojan-argo', createProxyMiddleware({ target: `http://127.0.0.1:3004`, ws: true, changeOrigin: true }));
+// --- 反向代理增强配置 ---
+// 必须透传 Headers，否则 Vless/Trojan 握手会失败
+const proxyOption = {
+    target: `http://127.0.0.1:3000`, // 统一转发到 Xray 监听端口
+    ws: true,
+    changeOrigin: true,
+    onProxyReqWs: (proxyReq, req, socket) => {
+        proxyReq.setHeader('Host', ARGO_DOMAIN);
+    },
+    logLevel: 'warn'
+};
+
+// 路由分发
+app.use('/vless-argo', createProxyMiddleware({ ...proxyOption, target: `http://127.0.0.1:3002` }));
+app.use('/vmess-argo', createProxyMiddleware({ ...proxyOption, target: `http://127.0.0.1:3003` }));
+app.use('/trojan-argo', createProxyMiddleware({ ...proxyOption, target: `http://127.0.0.1:3004` }));
 
 // --- 生成 Xray 配置 ---
 async function generateConfig() {
     const config = {
         log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' },
         inbounds: [
-            { port: ARGO_PORT, protocol: 'vless', settings: { clients: [{ id: UUID }], decryption: 'none', fallbacks: [{ dest: 3001 }, { path: "/vless-argo", dest: 3002 }, { path: "/vmess-argo", dest: 3003 }, { path: "/trojan-argo", dest: 3004 }] }, streamSettings: { network: 'tcp' } },
-            { port: 3001, listen: "127.0.0.1", protocol: "vless", settings: { clients: [{ id: UUID }], decryption: "none" }, streamSettings: { network: "tcp" } },
-            { port: 3002, listen: "127.0.0.1", protocol: "vless", settings: { clients: [{ id: UUID }], decryption: "none" }, streamSettings: { network: "ws", wsSettings: { path: "/vless-argo" } } },
-            { port: 3003, listen: "127.0.0.1", protocol: "vmess", settings: { clients: [{ id: UUID, alterId: 0 }] }, streamSettings: { network: "ws", wsSettings: { path: "/vmess-argo" } } },
-            { port: 3004, listen: "127.0.0.1", protocol: "trojan", settings: { clients: [{ password: UUID }] }, streamSettings: { network: "ws", wsSettings: { path: "/trojan-argo" } } }
+            // Vless WS
+            { 
+                port: 3002, listen: "127.0.0.1", protocol: "vless", 
+                settings: { clients: [{ id: UUID }], decryption: "none" }, 
+                streamSettings: { network: "ws", wsSettings: { path: "/vless-argo" } } 
+            },
+            // Vmess WS
+            { 
+                port: 3003, listen: "127.0.0.1", protocol: "vmess", 
+                settings: { clients: [{ id: UUID, alterId: 0 }] }, 
+                streamSettings: { network: "ws", wsSettings: { path: "/vmess-argo" } } 
+            },
+            // Trojan WS
+            { 
+                port: 3004, listen: "127.0.0.1", protocol: "trojan", 
+                settings: { clients: [{ password: UUID }] }, 
+                streamSettings: { network: "ws", wsSettings: { path: "/trojan-argo" } } 
+            }
         ],
         outbounds: [{ protocol: "freedom", tag: "direct" }]
     };
@@ -54,7 +78,6 @@ async function generateConfig() {
 async function downloadFiles() {
     const arch = os.arch().includes('arm') ? 'arm64' : 'amd64';
     const url = `https://${arch}.ssss.nyc.mn/web`;
-    console.log(`Downloading from: ${url}`);
     const response = await axios({ method: 'get', url: url, responseType: 'stream' });
     const writer = fs.createWriteStream(webPath);
     response.data.pipe(writer);
@@ -70,10 +93,14 @@ async function downloadFiles() {
 // --- 生成订阅链接 ---
 async function generateLinks() {
     const nodeName = NAME;
-    const VMESS = { v: '2', ps: nodeName, add: CFIP, port: CFPORT, id: UUID, aid: '0', scy: 'none', net: 'ws', type: 'none', host: ARGO_DOMAIN, path: '/vmess-argo?ed=2560', tls: 'tls', sni: ARGO_DOMAIN };
-    const vmessLink = `vmess://${Buffer.from(JSON.stringify(VMESS)).toString('base64')}`;
-    const vlessLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${ARGO_DOMAIN}&type=ws&host=${ARGO_DOMAIN}&path=%2Fvless-argo%3Fed%3D2560#${nodeName}`;
-    const trojanLink = `trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&sni=${ARGO_DOMAIN}&type=ws&host=${ARGO_DOMAIN}&path=%2Ftrojan-argo%3Fed%3D2560#${nodeName}`;
+    const commonQuery = `sni=${ARGO_DOMAIN}&type=ws&host=${ARGO_DOMAIN}`;
+    
+    const vlessLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&${commonQuery}&path=%2Fvless-argo%3Fed%3D2048#${nodeName}`;
+    
+    const VMESS_OBJ = { v: '2', ps: nodeName, add: CFIP, port: CFPORT, id: UUID, aid: '0', scy: 'none', net: 'ws', type: 'none', host: ARGO_DOMAIN, path: '/vmess-argo?ed=2048', tls: 'tls', sni: ARGO_DOMAIN };
+    const vmessLink = `vmess://${Buffer.from(JSON.stringify(VMESS_OBJ)).toString('base64')}`;
+    
+    const trojanLink = `trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&${commonQuery}&path=%2Ftrojan-argo%3Fed%3D2048#${nodeName}`;
     
     const subContent = Buffer.from(`${vlessLink}\n${vmessLink}\n${trojanLink}`).toString('base64');
     
@@ -81,31 +108,23 @@ async function generateLinks() {
         res.set('Content-Type', 'text/plain; charset=utf-8');
         res.send(subContent);
     });
-    console.log(`订阅生成成功: /${SUB_PATH}`);
+    console.log(`[OK] 订阅路由注册成功: /${SUB_PATH}`);
 }
 
-// --- 主运行逻辑 ---
 async function startserver() {
     try {
-        console.log('正在初始化配置...');
         await generateConfig();
-        console.log('正在下载核心文件...');
         await downloadFiles();
-        console.log('正在生成订阅路由...');
         await generateLinks();
-        
-        // 启动 Xray 核心 (不再隐藏错误日志)
-        console.log('正在启动 Xray 核心...');
-        exec(`nohup ${webPath} -c ${configPath} &`);
-        
-        console.log('所有组件已就绪。');
+        // 启动核心，移除 nohup 的日志丢弃，方便调试
+        exec(`${webPath} -c ${configPath}`);
+        console.log('[OK] Xray 核心已启动');
     } catch (error) {
-        console.error('启动失败:', error.message);
+        console.error('[Error] 启动失败:', error.message);
     }
 }
 
-// --- 启动服务 ---
 app.listen(PORT, () => {
-    console.log(`HTTP 服务已在端口 ${PORT} 启动`);
-    startserver(); // 关键：确保函数被调用
+    console.log(`[OK] HTTP Server 运行在端口: ${PORT}`);
+    startserver();
 });
