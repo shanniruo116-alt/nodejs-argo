@@ -20,51 +20,49 @@ const CFPORT = 443;
 const NAME = process.env.NAME || 'beyoundtime';
 
 // --- 文件路径定义 ---
-if (!fs.existsSync(FILE_PATH)) fs.mkdirSync(FILE_PATH);
+if (!fs.existsSync(FILE_PATH)) fs.mkdirSync(FILE_PATH, { recursive: true });
 const webPath = path.join(FILE_PATH, 'web');
-const subPath = path.join(FILE_PATH, 'sub.txt');
 const configPath = path.join(FILE_PATH, 'config.json');
 
 // --- 根路由 ---
 app.get("/", (req, res) => res.send("Server is running!"));
 
-// --- 反向代理增强配置 ---
-// 必须透传 Headers，否则 Vless/Trojan 握手会失败
-const proxyOption = {
-    target: `http://127.0.0.1:3000`, // 统一转发到 Xray 监听端口
-    ws: true,
-    changeOrigin: true,
-    onProxyReqWs: (proxyReq, req, socket) => {
-        proxyReq.setHeader('Host', ARGO_DOMAIN);
-    },
-    logLevel: 'warn'
-};
+// --- 核心反向代理逻辑 ---
+// 针对不同协议使用不同的转发规则，确保 WS 握手成功
+function createWsProxy(path, targetPort) {
+    return createProxyMiddleware(path, {
+        target: `http://127.0.0.1:${targetPort}`,
+        ws: true,
+        changeOrigin: true,
+        onProxyReqWs: (proxyReq) => {
+            proxyReq.setHeader('Host', ARGO_DOMAIN);
+        },
+        logLevel: 'warn'
+    });
+}
 
-// 路由分发
-app.use('/vless-argo', createProxyMiddleware({ ...proxyOption, target: `http://127.0.0.1:3002` }));
-app.use('/vmess-argo', createProxyMiddleware({ ...proxyOption, target: `http://127.0.0.1:3003` }));
-app.use('/trojan-argo', createProxyMiddleware({ ...proxyOption, target: `http://127.0.0.1:3004` }));
+// 路由分发 (改用 40000+ 端口避让)
+app.use(createWsProxy('/vless-argo', 40002));
+app.use(createWsProxy('/vmess-argo', 40003));
+app.use(createWsProxy('/trojan-argo', 40004));
 
 // --- 生成 Xray 配置 ---
 async function generateConfig() {
     const config = {
         log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' },
         inbounds: [
-            // Vless WS
             { 
-                port: 3002, listen: "127.0.0.1", protocol: "vless", 
+                port: 40002, listen: "127.0.0.1", protocol: "vless", 
                 settings: { clients: [{ id: UUID }], decryption: "none" }, 
                 streamSettings: { network: "ws", wsSettings: { path: "/vless-argo" } } 
             },
-            // Vmess WS
             { 
-                port: 3003, listen: "127.0.0.1", protocol: "vmess", 
+                port: 40003, listen: "127.0.0.1", protocol: "vmess", 
                 settings: { clients: [{ id: UUID, alterId: 0 }] }, 
                 streamSettings: { network: "ws", wsSettings: { path: "/vmess-argo" } } 
             },
-            // Trojan WS
             { 
-                port: 3004, listen: "127.0.0.1", protocol: "trojan", 
+                port: 40004, listen: "127.0.0.1", protocol: "trojan", 
                 settings: { clients: [{ password: UUID }] }, 
                 streamSettings: { network: "ws", wsSettings: { path: "/trojan-argo" } } 
             }
@@ -92,15 +90,15 @@ async function downloadFiles() {
 
 // --- 生成订阅链接 ---
 async function generateLinks() {
-    const nodeName = NAME;
     const commonQuery = `sni=${ARGO_DOMAIN}&type=ws&host=${ARGO_DOMAIN}`;
     
-    const vlessLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&${commonQuery}&path=%2Fvless-argo%3Fed%3D2048#${nodeName}`;
+    // 生成节点链接
+    const vlessLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&${commonQuery}&path=%2Fvless-argo#${NAME}-Vless`;
     
-    const VMESS_OBJ = { v: '2', ps: nodeName, add: CFIP, port: CFPORT, id: UUID, aid: '0', scy: 'none', net: 'ws', type: 'none', host: ARGO_DOMAIN, path: '/vmess-argo?ed=2048', tls: 'tls', sni: ARGO_DOMAIN };
+    const VMESS_OBJ = { v: '2', ps: `${NAME}-Vmess`, add: CFIP, port: CFPORT, id: UUID, aid: '0', scy: 'none', net: 'ws', type: 'none', host: ARGO_DOMAIN, path: '/vmess-argo', tls: 'tls', sni: ARGO_DOMAIN };
     const vmessLink = `vmess://${Buffer.from(JSON.stringify(VMESS_OBJ)).toString('base64')}`;
     
-    const trojanLink = `trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&${commonQuery}&path=%2Ftrojan-argo%3Fed%3D2048#${nodeName}`;
+    const trojanLink = `trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&${commonQuery}&path=%2Ftrojan-argo#${NAME}-Trojan`;
     
     const subContent = Buffer.from(`${vlessLink}\n${vmessLink}\n${trojanLink}`).toString('base64');
     
@@ -108,7 +106,7 @@ async function generateLinks() {
         res.set('Content-Type', 'text/plain; charset=utf-8');
         res.send(subContent);
     });
-    console.log(`[OK] 订阅路由注册成功: /${SUB_PATH}`);
+    console.log(`[OK] 订阅地址: https://${PROJECT_URL}/${SUB_PATH}`);
 }
 
 async function startserver() {
@@ -116,15 +114,15 @@ async function startserver() {
         await generateConfig();
         await downloadFiles();
         await generateLinks();
-        // 启动核心，移除 nohup 的日志丢弃，方便调试
+        // 运行核心
         exec(`${webPath} -c ${configPath}`);
-        console.log('[OK] Xray 核心已启动');
+        console.log('[OK] Xray 核心运行中...');
     } catch (error) {
         console.error('[Error] 启动失败:', error.message);
     }
 }
 
 app.listen(PORT, () => {
-    console.log(`[OK] HTTP Server 运行在端口: ${PORT}`);
+    console.log(`[OK] Server started on port ${PORT}`);
     startserver();
 });
