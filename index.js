@@ -14,9 +14,9 @@ const FILE_PATH = process.env.FILE_PATH || './tmp';
 const SUB_PATH = process.env.SUB_PATH || 'sub';
 const PORT = process.env.PORT || 8080; 
 const UUID = process.env.UUID || 'eb7db1ee-3ef8-4545-94db-346146706ce9';
-const ARGO_DOMAIN = process.env.ARGO_DOMAIN || 'node.beyoundtime-production-8b80.up.railway.app';
+const ARGO_DOMAIN = process.env.ARGO_DOMAIN || 'beyoundtime-production-8b80.up.railway.app';
 const ARGO_PORT = 28766; 
-const CFIP = process.env.CFIP || 'node.beyoundtime-production-8b80.up.railway.app';
+const CFIP = process.env.CFIP || 'beyoundtime-production-8b80.up.railway.app';
 const CFPORT = 443;
 const NAME = process.env.NAME || 'beyoundtime';
 
